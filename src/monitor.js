@@ -8,13 +8,9 @@ const MIN_LIQUIDITY = 5000;
 
 const WETH = '0x4200000000000000000000000000000000000006';
 const UNISWAP_V2_FACTORY = '0x8909Dc15e40173Ff4699343b6eB8132c65e18eC9';
-const AERODROME_FACTORY = '0x420DD381b31aEf6683db6B902084cB0FFECe40Da';
 
 const V2_ABI = parseAbi([
   'event PairCreated(address indexed token0, address indexed token1, address pair, uint)',
-]);
-const AERO_ABI = parseAbi([
-  'event PoolCreated(address indexed token0, address indexed token1, bool indexed stable, address pool, uint)',
 ]);
 const PAIR_ABI = parseAbi([
   'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
@@ -104,15 +100,7 @@ async function pollNewPairs() {
       toBlock: block,
     });
 
-    const aeroLogs = await client.getLogs({
-      address: AERODROME_FACTORY,
-      event: AERO_ABI[0],
-      fromBlock,
-      toBlock: block,
-    });
-
-    const total = v2Logs.length + aeroLogs.length;
-    if (total > 0) console.log('🔎 Found ' + total + ' new pairs');
+    console.log('📡 Block ' + block + ' | V2 pairs found: ' + v2Logs.length);
 
     for (const log of v2Logs) {
       const { token0, token1, pair } = log.args;
@@ -121,21 +109,14 @@ async function pollNewPairs() {
       await processToken(tokenAddress, pair, 'V2');
     }
 
-    for (const log of aeroLogs) {
-      const { token0, token1, pool } = log.args;
-      if (!token0 || !token1) continue;
-      const tokenAddress = token0.toLowerCase() === WETH.toLowerCase() ? token1 : token0;
-      await processToken(tokenAddress, pool, 'Aerodrome');
-    }
-
   } catch (err) {
     console.log('⚠️ Poll error: ' + err.message);
   }
 }
 
 export function startMonitor() {
-  console.log('🔍 Monitoring Base (V2 + Aerodrome)...');
-  setInterval(pollNewPairs, 10000);
+  console.log('🔍 Monitoring Base (V2)...');
+  setInterval(pollNewPairs, 15000);
   setInterval(() => console.log('💓 Bot alive - ' + new Date().toISOString()), 30000);
   pollNewPairs();
 }
