@@ -1,1 +1,139 @@
+import { createPublicClient, http, parseAbi, formatEther } from 'viem';
+import { base } from 'viem/chains';
+import { sendAlert } from './telegram.js';
+import { autoBuy } from './trader.js';
 
+const BASESCAN_KEY = process.env.BASESCAN_API_KEY;
+const MIN_LIQUIDITY = 5000;
+
+const WETH = '0x4200000000000000000000000000000000000006';
+const UNISWAP_V2_FACTORY = '0x8909Dc15e40173Ff4699343b6eB8132c65e18eC9';
+const AERODROME_FACTORY = '0x420DD381b31aEf6683db6B902084cB0FFECe40Da';
+
+const V2_ABI = parseAbi([
+  'event PairCreated(address indexed token0, address indexed token1, address pair, uint)',
+]);
+const AERO_ABI = parseAbi([
+  'event PoolCreated(address indexed token0, address indexed token1, bool indexed stable, address pool, uint)',
+]);
+const PAIR_ABI = parseAbi([
+  'function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)',
+  'function token0() view returns (address)',
+]);
+
+const client = createPublicClient({
+  chain: base,
+  transport: http(process.env.RPC_URL),
+});
+
+const processedPairs = new Set();
+
+async function getEthPrice() {
+  try {
+    const res = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT');
+    const data = await res.json();
+    return parseFloat(data.price);
+  } catch (e) {
+    return 2500;
+  }
+}
+
+async function getTokenMeta(address) {
+  try {
+    const url = `https://api.basescan.org/api?module=token&action=tokeninfo&contractaddress=${address}&apikey=${BASESCAN_KEY}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.result && data.result[0]) {
+      return { name: data.result[0].tokenName, symbol: data.result[0].symbol };
+    }
+  } catch (e) {}
+  return { name: 'Unknown', symbol: '???' };
+}
+
+async function getLiquidityUsd(pairAddress) {
+  try {
+    const reserves = await client.readContract({
+      address: pairAddress,
+      abi: PAIR_ABI,
+      functionName: 'getReserves',
+    });
+    const token0 = await client.readContract({
+      address: pairAddress,
+      abi: PAIR_ABI,
+      functionName: 'token0',
+    });
+    const wethReserve = token0.toLowerCase() === WETH.toLowerCase()
+      ? reserves[0] : reserves[1];
+    const ethPrice = await getEthPrice();
+    const liquidity = parseFloat(formatEther(wethReserve)) * 2 * ethPrice;
+    console.log('💧 Liquidity: $' + liquidity.toFixed(0) + ' for ' + pairAddress);
+    return liquidity;
+  } catch (e) {
+    console.log('❌ Liquidity error: ' + e.message);
+    return 0;
+  }
+}
+
+async function processToken(tokenAddress, pairAddress, source) {
+  if (processedPairs.has(pairAddress)) return;
+  processedPairs.add(pairAddress);
+
+  const { name, symbol } = await getTokenMeta(tokenAddress);
+  console.log('🪙 [' + source + '] ' + name + ' (' + symbol + ') at ' + tokenAddress);
+
+  const liquidity = await getLiquidityUsd(pairAddress);
+  if (liquidity < MIN_LIQUIDITY) {
+    console.log('🚫 Filtered: $' + liquidity.toFixed(0) + ' < $' + MIN_LIQUIDITY);
+    return;
+  }
+
+  console.log('✅ Sending alert for: ' + name + ' (' + symbol + ')');
+  await sendAlert({ type: 'NEW_TOKEN', name, symbol, tokenAddress, liquidity: liquidity.toFixed(0), chain: 'BASE' });
+  await autoBuy(tokenAddress, name, symbol, 'BASE');
+}
+
+async function pollNewPairs() {
+  try {
+    const block = await client.getBlockNumber();
+    const fromBlock = block - 5n;
+
+    const v2Logs = await client.getLogs({
+      address: UNISWAP_V2_FACTORY,
+      event: V2_ABI[0],
+      fromBlock,
+      toBlock: block,
+    });
+
+    const aeroLogs = await client.getLogs({
+      address: AERODROME_FACTORY,
+      event: AERO_ABI[0],
+      fromBlock,
+      toBlock: block,
+    });
+
+    const total = v2Logs.length + aeroLogs.length;
+    if (total > 0) console.log('🔎 Found ' + total + ' new pairs');
+
+    for (const log of v2Logs) {
+      const { token0, token1, pair } = log.args;
+      const tokenAddress = token0.toLowerCase() === WETH.toLowerCase() ? token1 : token0;
+      await processToken(tokenAddress, pair, 'V2');
+    }
+
+    for (const log of aeroLogs) {
+      const { token0, token1, pool } = log.args;
+      const tokenAddress = token0.toLowerCase() === WETH.toLowerCase() ? token1 : token0;
+      await processToken(tokenAddress, pool, 'Aerodrome');
+    }
+
+  } catch (err) {
+    console.log('⚠️ Poll error: ' + err.message);
+  }
+}
+
+export function startMonitor() {
+  console.log('🔍 Monitoring Base (V2 + Aerodrome)...');
+  setInterval(pollNewPairs, 5000);
+  setInterval(() => console.log('💓 Bot alive - ' + new Date().toISOString()), 30000);
+  pollNewPairs();
+}
