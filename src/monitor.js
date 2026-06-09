@@ -116,6 +116,7 @@ async function pollNewPairs() {
 
     for (const log of v2Logs) {
       const { token0, token1, pair } = log.args;
+      if (!token0 || !token1) continue;
       const tokenAddress = token0.toLowerCase() === WETH.toLowerCase() ? token1 : token0;
       await processToken(tokenAddress, pair, 'V2');
     }
@@ -125,7 +126,7 @@ async function pollNewPairs() {
       if (!token0 || !token1) continue;
       const tokenAddress = token0.toLowerCase() === WETH.toLowerCase() ? token1 : token0;
       await processToken(tokenAddress, pool, 'Aerodrome');
-    }    }
+    }
 
   } catch (err) {
     console.log('⚠️ Poll error: ' + err.message);
