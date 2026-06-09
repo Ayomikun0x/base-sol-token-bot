@@ -1,9 +1,10 @@
 import { Telegraf } from 'telegraf';
 
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 export async function sendAlert({ type, name, symbol, tokenAddress, liquidity, chain }) {
+  const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+  
   const chainLabel = chain === 'SOL' ? '🟣 Solana' : '🔵 Base';
   const explorerUrl = chain === 'SOL'
     ? `https://solscan.io/token/${tokenAddress}`
@@ -19,13 +20,8 @@ Explorer: ${explorerUrl}
 
   try {
     await bot.telegram.sendMessage(CHAT_ID, msg);
+    console.log('✅ TG alert sent for ' + name);
   } catch (e) {
     console.log('❌ Telegram error: ' + e.message);
   }
-}
-
-export async function sendHeartbeat() {
-  try {
-    await bot.telegram.sendMessage(CHAT_ID, '💓 Bot alive');
-  } catch (e) {}
 }
