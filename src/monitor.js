@@ -134,9 +134,6 @@ async function pollNewPairs() {
 export function startMonitor() {
   console.log('🔍 Monitoring Base (V2 + Aerodrome)...');
   setInterval(pollNewPairs, 5000);
-  setInterval(async () => {
-  console.log('💓 Bot alive - ' + new Date().toISOString());
-  await sendAlert({ type: 'NEW_TOKEN', name: 'Test Token', symbol: 'TEST', tokenAddress: '0x000000000000000000000000000000000000dead', liquidity: '9999', chain: 'BASE' });
-}, 30000);;
+  setInterval(() => console.log('💓 Bot alive - ' + new Date().toISOString()), 30000);
   pollNewPairs();
 }
