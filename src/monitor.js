@@ -95,7 +95,7 @@ async function processToken(tokenAddress, pairAddress, source) {
 async function pollNewPairs() {
   try {
     const block = await client.getBlockNumber();
-    const fromBlock = block - 10n;
+    const fromBlock = block - 5n;
 
     const v2Logs = await client.getLogs({
       address: UNISWAP_V2_FACTORY,
@@ -135,7 +135,7 @@ async function pollNewPairs() {
 
 export function startMonitor() {
   console.log('🔍 Monitoring Base (V2 + Aerodrome)...');
-  setInterval(pollNewPairs, 5000);
+  setInterval(pollNewPairs, 10000);
   setInterval(() => console.log('💓 Bot alive - ' + new Date().toISOString()), 30000);
   pollNewPairs();
 }
