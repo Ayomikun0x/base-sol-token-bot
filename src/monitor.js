@@ -95,7 +95,7 @@ async function processToken(tokenAddress, pairAddress, source) {
 async function pollNewPairs() {
   try {
     const block = await client.getBlockNumber();
-    const fromBlock = block - 50n;
+    const fromBlock = block - 10n;
 
     const v2Logs = await client.getLogs({
       address: UNISWAP_V2_FACTORY,
