@@ -122,9 +122,10 @@ async function pollNewPairs() {
 
     for (const log of aeroLogs) {
       const { token0, token1, pool } = log.args;
+      if (!token0 || !token1) continue;
       const tokenAddress = token0.toLowerCase() === WETH.toLowerCase() ? token1 : token0;
       await processToken(tokenAddress, pool, 'Aerodrome');
-    }
+    }    }
 
   } catch (err) {
     console.log('⚠️ Poll error: ' + err.message);
